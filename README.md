@@ -369,7 +369,7 @@ foreach ($User in $TenantUsers) {
     } | Format-List
 }
 ```
-### 📈 Target Telemetry Output Sample
+ 📈 Target Telemetry Output Sample
 When evaluated against the active hybrid tenant directory, the automated pipeline extracts, structures, and logs the directory health baseline into the following reporting schema for internal security compliance officers:
 === LIVE IAM COMPLIANCE AUDIT REPORT ===
 ----------------------------------------------------------------------
