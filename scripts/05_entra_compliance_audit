@@ -1,0 +1,46 @@
+# ==============================================================================
+# PHASE 5: MICROSOFT GRAPH COMPLIANCE & IDENTITY AUDITING
+# ==============================================================================
+# 1. Ensure the modern Microsoft Graph Identity Module is installed
+if (-not (Get-Module -ListAvailable -Name Microsoft.Graph.Users)) {
+    Write-Host "Installing Microsoft Graph Users Module..." -ForegroundColor Cyan
+    Install-Module Microsoft.Graph.Users -Force -AllowClobber -Scope CurrentUser
+}
+
+Import-Module Microsoft.Graph.Users
+
+# 2. Authenticate to Microsoft Graph with required audit directory permissions
+Write-Host "Connecting to Microsoft Graph API..." -ForegroundColor Cyan
+Connect-MgGraph -Scopes "User.Read.All"
+
+# 3. Fetch all cloud identities synced from your lab domain
+$TenantUsers = Get-MgUser -All -Property "displayName","userPrincipalName","id","assignedLicenses"
+
+Write-Host "`n=== LIVE IAM COMPLIANCE AUDIT REPORT ===" -ForegroundColor Yellow
+echo "----------------------------------------------------------------------"
+
+# 4. Run compliance checks across your personas
+foreach ($User in $TenantUsers) {
+    $RiskFlags = @()
+    $Status = "COMPLIANT"
+    
+    # Audit Rule 01: Identify high-risk service/break-glass accounts lacking licensing structure
+    if ($User.UserPrincipalName -like "*breakglass*" -and (-not $User.AssignedLicenses)) {
+        $RiskFlags += "Privileged Break-Glass Account missing explicit license mapping"
+        $Status = "NON-COMPLIANT"
+    }
+    
+    # Audit Rule 02: Identify un-monitored third-party vendor accounts
+    if ($User.UserPrincipalName -like "*vsupport*") {
+        $RiskFlags += "External Vendor Account requires quarterly access recertification"
+        $Status = "REVIEW REQUIRED"
+    }
+
+    # Output the audit record
+    [PSCustomObject]@{
+        "Identity Name" = $User.DisplayName
+        "UPN / Cloud ID" = $User.UserPrincipalName
+        "Audit Status"   = $Status
+        "Risk Analysis"  = if ($RiskFlags) { $RiskFlags -join " | " } else { "No current anomalies detected" }
+    } | Format-List
+}
