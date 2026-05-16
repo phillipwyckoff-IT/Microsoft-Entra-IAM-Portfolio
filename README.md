@@ -125,3 +125,152 @@ To simulate an immediate incident response or bulk offboarding event, a secondar
 #### Target Directory Suspended State:
 The downward arrows on the user objects visually confirm that the accounts are explicitly disabled across the domain:
 ![Active Directory Disabled State](02b_active_directory_disabled_users.png)
+
+---
+
+---
+
+## Phase 3: Cloud Access Governance via Identity-as-Code (IdaC)
+**Objective:** Programmatically orchestrate Zero-Trust access controls within the Microsoft Entra ID tenant using HashiCorp Terraform, eliminating manual UI configuration risk and enforcing continuous security posture baselines.
+
+### 🛠️ Architectural Strategy & Design
+Instead of performing manual click-ops inside the Azure portal, the tenant's security layer was codified using declarative **HashiCorp Configuration Language (HCL)**. 
+
+To achieve production-grade consistency, the pipeline utilizes **Dynamic Data Sources** rather than hardcoding sensitive object GUIDs. Terraform dynamically queries the live directory at runtime to look up the newly synchronized on-premises identities (`alexadmin` and `vsupport`) using their User Principal Names (UPNs) and binds them directly to targeted access perimeters.
+
+### 📝 Codebase Architecture
+
+The deployment infrastructure is split cleanly into a dedicated `terraform/` directory:
+
+#### 1. Provider Infrastructure Initialization (`provider.tf`)
+Defines the required HashiCorp Microsoft Entra ID (`azuread`) engine hooks and establishes the Azure CLI interactive authentication bridge.
+```hcl
+terraform {
+  required_providers {
+    azuread = {
+      source  = "hashicorp/azuread"
+      version = "~> 2.48.0"
+    }
+  }
+}
+
+provider "azuread" {
+  # Authenticated securely via active local Azure CLI session tokens
+}
+```
+### 2. Core Zero-Trust Boundary Matrix (main.tf)
+Defines environment variables, resolves dynamic object identities, and declares two distinct conditional access restrictions.
+# Global Tenant Context Variables
+variable "tenant_domain" {
+  type        = string
+  default     = "scfun.onmicrosoft.com" # Target directory primary suffix
+  description = "The target primary domain suffix for the Entra ID tenant."
+}
+
+# Dynamic Directory Identity Lookups (Data Sources)
+data "azuread_user" "admin_user" {
+  user_principal_name = "alexadmin@${var.tenant_domain}"
+}
+
+data "azuread_user" "vendor_user" {
+  user_principal_name = "vsupport@${var.tenant_domain}"
+}
+
+# Zero-Trust Policy 01: Enforce MFA for Administrative Personas
+resource "azuread_conditional_access_policy" "mfa_for_admins" {
+  display_name = "SEC-CAP-01-MFA-For-Administrators"
+  state        = "enabled"
+
+  conditions {
+    client_app_types = ["all"]
+    
+    applications {
+      included_applications = ["All"]
+    }
+
+    users {
+      included_users = [data.azuread_user.admin_user.object_id]
+    }
+  }
+
+  grant_controls {
+    operator          = "OR"
+    built_in_controls = ["mfa"]
+  }
+}
+
+# Zero-Trust Policy 02: Restrict Third-Party Vendor Access
+resource "azuread_conditional_access_policy" "vendor_security_gate" {
+  display_name = "SEC-CAP-02-Vendor-Security-Gate"
+  state        = "enabled"
+
+  conditions {
+    client_app_types = ["all"]
+
+    applications {
+      included_applications = ["All"]
+    }
+
+    users {
+      included_users = [data.azuread_user.vendor_user.object_id]
+    }
+  }
+
+  grant_controls {
+    operator          = "OR"
+    built_in_controls = ["mfa"]
+  }
+}
+
+Continuous Deployment Pipeline Workflow
+Execution and enforcement were carried out inside a standard Infrastructure-as-Code pipeline via PowerShell:
+
+Initialize the Working Directory:
+
+PowerShell
+terraform init
+Downloads the required HashiCorp Microsoft Graph API integration plugins.
+
+Generate the Execution Strategy (Dry Run):
+
+PowerShell
+terraform plan
+Evaluates configuration state against active cloud tenant schema to preview changes before modification.
+
+Enforce Target Posture:
+
+PowerShell
+terraform apply -auto-approve
+🔍 Real-World Engineering Problem Remediation
+The Obstacle: Initial orchestration deployment phases failed with an API BadRequest response from Microsoft Graph:
+
+"Security Defaults is enabled in the tenant. You must disable Security defaults before enabling a Conditional Access policy."
+
+The Root Cause Analysis: Greenfield Microsoft Entra ID tenants deploy with legacy un-customizable "Security Defaults" turned on natively. The Microsoft Graph API explicitly blocks custom conditional access engine evaluation if these underlying base settings are active.
+
+The Solution: Executed an administrative override within the tenant overview configuration panel to safely disable Security Defaults, explicitly citing the transition to advanced granular Conditional Access policies.
+
+Upon remediation, the pipeline immediately passed validation checks and successfully initialized both active rules.
+
+📊 Verification & Visual Evidence
+1. Command-Line Execution Output
+Successful infrastructure provisioning via the local automation runtime, confirming both active security resources were pushed upstream cleanly:
+
+2. Cloud Directory Status Validation
+The Microsoft Entra ID administration panel confirms that both programmatic security wrappers are fully active, enforcing real-time Zero-Trust policies across the tenant:
+---
+
+## Phase 4: Securing Emergency Access (Break-Glass Monitoring)
+**Objective:** Architect a continuous cloud monitoring telemetry pipeline to detect and alert on unauthorized utilization of the emergency break-glass account (`breakglass01`).
+
+### Security Strategy
+Emergency access accounts hold highly privileged global roles but are explicitly bypassed from Conditional Access MFA rules to prevent lockout during a widespread identity provider outage. Due to the high risk of account compromise, a zero-trust real-time monitoring solution was designed using Azure Monitor and Kusto Query Language (KQL).
+
+### Detection Engineering (KQL Query)
+The following query is deployed within an Azure Log Analytics Workspace, scheduled to run every 5 minutes with an alert threshold of `> 0` results:
+
+```kusto
+SigninLogs
+| where UserPrincipalName =~ "breakglass01@scfun.onmicrosoft.com"
+| where Status.errorCode == 0 
+| project TimeGenerated, UserPrincipalName, IPAddress, Location, ClientAppUsed, ResultDescription
