@@ -99,7 +99,7 @@ To simulate an active access modification ticket (the "Mover" phase of JML lifec
 To bypass the standard 30-minute background sync interval, an immediate manual delta synchronization cycle was forced via PowerShell to instantly enforce the access governance change across the hybrid boundary:
 
 ![PowerShell Forced Delta Sync Run](07_powershell_group_creation_delta_sync.png)
-![Hybrid Group Cloud Sync Members Verified](08_entra_cloud_group_rbac_verification.png)
+![Hybrid Group Cloud Sync Members Verified](08_hybrid_group_rbac_sync.png)
 
 ```powershell
 # 1. Create an On-Premises Security Group inside the synchronized OU path
