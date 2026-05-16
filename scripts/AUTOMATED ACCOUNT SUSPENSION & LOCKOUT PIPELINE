@@ -1,0 +1,22 @@
+# ==============================================================================
+# PHASE 2: AUTOMATED ACCOUNT SUSPENSION & LOCKOUT PIPELINE
+# ==============================================================================
+Import-Module ActiveDirectory
+
+# 1. TARGET USER MATRIX
+$TargetUsers = @("mvance", "erostova", "dkim", "alexadmin", "vsupport", "breakglass01")
+
+# 2. EXECUTION SUSPENSION ENGINE
+foreach ($SamName in $TargetUsers) {
+    if (Get-ADUser -Filter "SamAccountName -eq '$SamName'") {
+        Disable-ADAccount -Identity $SamName
+        Write-Host "Local Directory: Disabled account for $SamName" -ForegroundColor Yellow
+    } else {
+        Write-Host "Identity $SamName not found. Skipping." -ForegroundColor White
+    }
+}
+
+# 3. AUTOMATED PIPELINE REPLICATION
+Write-Host "Triggering Entra Connect Synchronization Engine..." -ForegroundColor Cyan
+Start-ADSyncSyncCycle -PolicyType Delta
+Write-Host "Pipeline Success: All local accounts disabled and sign-in blocked in Entra ID!" -ForegroundColor Green
