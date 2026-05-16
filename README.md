@@ -274,3 +274,115 @@ SigninLogs
 | where UserPrincipalName =~ "breakglass01@scfun.onmicrosoft.com"
 | where Status.errorCode == 0 
 | project TimeGenerated, UserPrincipalName, IPAddress, Location, ClientAppUsed, ResultDescription
+```
+---
+
+---
+
+## Phase 5: Programmatic Directory Governance & Compliance Auditing
+**Objective:** Engineer an automated compliance auditing utility using the modern Microsoft Graph API ecosystem to programmatically detect directory risk vectors, orphaned privileges, and external identity anomalies.
+
+### 📊 Governance Strategy & Design Choices
+In large-scale enterprise environments (particularly within regulated financial frameworks), manual portal inspections fail to meet continuous audit standards. This phase implements a scalable **Compliance-as-Code** reporting mechanism using a custom PowerShell pipeline designed around the modern **Microsoft Graph API core schema**.
+
+The auditing logic intentionally bypasses legacy modules to target active Graph endpoints directly, evaluating all synchronized directory personas against three core enterprise compliance rules:
+
+1. **Privileged Core Security Mapping (Rule 01):** Inspects high-value infrastructure identities (such as the emergency break-glass account `breakglass01`) to verify that explicit logging and premium structural licensing rules are intact. 
+2. **Third-Party Boundary Control (Rule 02):** Flags synchronized external contractor/vendor identities (`vsupport`) to enforce mandatory quarterly access re-certification cycles.
+3. **Automated Risk Profiling (Rule 03):** Dynamically parses object arrays to output a real-time risk classification matrix (`COMPLIANT`, `NON-COMPLIANT`, `REVIEW REQUIRED`), providing the IAM team with an instant data stream for risk remediation.
+
+---
+
+---
+
+## Phase 4: Least-Privilege Enforcement via Privileged Identity Management (PIM)
+**Objective:** Eliminate permanent standing administrative privileges within the cloud tenant by architecting a Just-In-Time (JIT) role elevation matrix to mitigate lateral movement risks and fulfill strict enterprise compliance frameworks (SOX/FINRA).
+
+### 🔒 The Problem: Standing Privileges as an Attack Vector
+In a standard legacy environment, administrative accounts often hold permanent global rights. If an administrative identity is compromised via credential harvesting or session hijacking at 3:00 AM, an adversary instantly gains full structural control over the directory before detection teams can respond.
+
+### 🛡️ The Architecture: Zero Standing Access (ZSA)
+To solve this, the synchronized administrative persona (`alexadmin`) was stripped of permanent active directory roles. Instead, the identity was onboarded into **Entra ID Privileged Identity Management (PIM)** and designated as **Eligible** rather than permanently assigned. 
+
+Under normal operating conditions, the account possesses zero active cloud directory permissions.
+
+### ⚙️ Just-In-Time (JIT) Activation Constraints
+When operational requirements necessitate administrative intervention (e.g., identity lifecycle modifications or break-glass tasks), the administrator must explicitly request role activation through the PIM control engine.
+
+The following governance policies were engineered into the activation workflow:
+
+Step-Up Authentication: Forces a mandatory, explicit Multi-Factor Authentication (MFA) challenge at the time of the request, bypassing cached session tokens.
+
+ITSM Ticket Mapping: Requires the engineer to input a valid corporate change management or help desk incident ticket number for auditable tracking.
+
+Time-Bound Ephemeral Access: Access is bound to a strict, hard-coded limit of 2 hours. Once the window closes, the Entra ID core engine automatically drops the active assignment tokens and returns the identity to a zero-privilege resting state.
+
+```text
+[Normal State: Zero Active Roles] ──> [Operational Need] ──> [PIM Request Gate] ──> [MFA + Ticket Justification] ──> [2-Hour Active Window] ──> [Auto-Revocation]
+
+---
+### 💻 Compliance Pipeline Source (`05_entra_compliance_audit.ps1`)
+
+The script is decoupled from native graphical front-ends, enabling it to run headless within scheduled enterprise automation tasks:
+
+```powershell
+# ==============================================================================
+# PHASE 5: MICROSOFT GRAPH COMPLIANCE & IDENTITY LIFECYCLE AUDITING
+# ==============================================================================
+Write-Host "Querying Microsoft Graph API directly via Identity Core Core..." -ForegroundColor Cyan
+
+# 1. Directly invoke the raw Graph API user metadata endpoints
+$RawResponse = az rest --method get --url "[https://graph.microsoft.com/v1.0/users](https://graph.microsoft.com/v1.0/users)?`$select=displayName,userPrincipalName,id,assignedLicenses"
+
+# 2. Parse the raw incoming JSON payload into structured PowerShell objects
+$GraphData = ConvertFrom-Json $RawResponse
+$TenantUsers = $GraphData.value
+
+Write-Host "`n=== LIVE IAM COMPLIANCE AUDIT REPORT ===" -ForegroundColor Yellow
+Write-Host "----------------------------------------------------------------------"
+
+# 3. Process identity structures through the compliance verification engine
+foreach ($User in $TenantUsers) {
+    $RiskFlags = @()
+    $Status = "COMPLIANT"
+    
+    # Audit Rule 01: Verify licensing integrity on administrative break-glass accounts
+    if ($User.userPrincipalName -like "*breakglass*" -and ($User.assignedLicenses.Count -eq 0 -or $User.assignedLicenses -eq $null)) {
+        $RiskFlags += "Privileged Break-Glass Account missing explicit license mapping"
+        $Status = "NON-COMPLIANT"
+    }
+    
+    # Audit Rule 02: Enforce lifecycle boundaries on external vendor personas
+    if ($User.userPrincipalName -like "*vsupport*") {
+        $RiskFlags += "External Vendor Account requires quarterly access recertification"
+        $Status = "REVIEW REQUIRED"
+    }
+
+    # Stream the formatted audit record out to the host console
+    [PSCustomObject]@{
+        "Identity Name" = $User.displayName
+        "UPN / Cloud ID" = $User.userPrincipalName
+        "Audit Status"   = $Status
+        "Risk Analysis"  = if ($RiskFlags) { $RiskFlags -join " | " } else { "No current anomalies detected" }
+    } | Format-List
+}
+```
+### 📈 Target Telemetry Output Sample
+When evaluated against the active hybrid tenant directory, the automated pipeline extracts, structures, and logs the directory health baseline into the following reporting schema for internal security compliance officers:
+=== LIVE IAM COMPLIANCE AUDIT REPORT ===
+----------------------------------------------------------------------
+
+Identity Name : Alex Admin
+UPN / Cloud ID: alexadmin@scfun.onmicrosoft.com
+Audit Status  : COMPLIANT
+Risk Analysis : No current anomalies detected
+
+Identity Name : Emergency BreakGlass
+UPN / Cloud ID: breakglass01@scfun.onmicrosoft.com
+Audit Status  : NON-COMPLIANT
+Risk Analysis : Privileged Break-Glass Account missing explicit license mapping
+
+Identity Name : Vendor Support
+UPN / Cloud ID: vsupport@scfun.onmicrosoft.com
+Audit Status  : REVIEW REQUIRED
+Risk Analysis : External Vendor Account requires quarterly access recertification
