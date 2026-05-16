@@ -1,0 +1,20 @@
+# ==============================================================================
+# HYBRID ACCESS MODIFICATION (MOVER SCENARIO)
+# ==============================================================================
+Import-Module ActiveDirectory
+
+# 1. Create an On-Premises Security Group inside your synchronized OU folder
+New-ADGroup -Name "SG-SecurityOperations-Cloud" `
+            -GroupScope Global `
+            -GroupCategory Security `
+            -Path "OU=Sync_Users,DC=sc300lab,DC=com" # Ensure this matches your exact domain path (.com or .local)
+
+# 2. Dynamically modify user access profile by nesting the identity inside the group
+Add-ADGroupMember -Identity "SG-SecurityOperations-Cloud" -Members "erostova"
+Write-Host "Local Directory: Group created and Elena added successfully." -ForegroundColor Green
+
+# 3. Administrative Power-Move: Force immediate delta synchronization replication
+Write-Host "Triggering Entra Connect Synchronization Engine..." -ForegroundColor Cyan
+Start-ADSyncSyncCycle -PolicyType Delta
+
+Write-Host "Pipeline Success: Hybrid access modification replicated to Entra ID!" -ForegroundColor Green
