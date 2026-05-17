@@ -130,65 +130,96 @@ In a real environment, limiting synchronization scope helps reduce risk by ensur
 - The difference between Password Hash Sync and Password Writeback
 - Why OU filtering is important in hybrid identity environments
 - How configuration choices directly affect what identities appear in Microsoft Entra ID
+# Phase 3: Identity Lifecycle Testing (Joiner / Mover / Leaver)
 
-## Phase 3: Cloud Ingestion & Identity Governance Verification
-Following the completion of the synchronization engine configuration, a comprehensive cloud audit was performed within the Microsoft Entra Admin Center portal. 
+## Objective
+Validate how user lifecycle changes in Active Directory (joiner, mover, leaver scenarios) are reflected in Microsoft Entra ID through synchronization.
 
-All six specialized on-premises identities successfully registered in the cloud tenant with a directory authorization state of `On-premises sync enabled: Yes`.
+---
+
+## 1. Cloud Sync Verification (Joiner Validation)
+
+## What I Observed
+- Verified that on-premises users synchronized to Microsoft Entra ID
+- Confirmed accounts showed as “On-premises sync enabled”
+- Validated identity visibility in the cloud tenant
 
 ![Entra ID User Cloud State](06_entra_cloud_user_verification.png)
 
-### Hybrid Access Modification (Mover Scenario)
-To simulate an active access modification ticket (the "Mover" phase of JML lifecycle management), an on-premises security group was engineered via administrative shell tools, and an identity was nested inside. 
+---
 
-To bypass the standard 30-minute background sync interval, an immediate manual delta synchronization cycle was forced via PowerShell to instantly enforce the access governance change across the hybrid boundary:
+## 2. Mover Scenario: Group-Based Access Change
 
+To simulate a role change, I updated user access using an Active Directory security group and triggered a manual sync.
+
+## What I Implemented
+- Created a security group in Active Directory
+- Added a user to the group
+- Triggered a delta sync using Azure AD Connect
+- Verified group membership in Microsoft Entra ID
+
+### Screenshots
 ![PowerShell Forced Delta Sync Run](07_powershell_group_creation_delta_sync.png)
+
 ![Hybrid Group Cloud Sync Members Verified](08_hybrid_group_rbac_sync.png)
 
+<details>
+<summary>View Script</summary>
+
 ```powershell
-# 1. Create an On-Premises Security Group inside the synchronized OU path
 New-ADGroup -Name "SG-SecurityOperations-Cloud" `
             -GroupScope Global `
             -GroupCategory Security `
             -Path "OU=Sync_Users,DC=sc300lab,DC=com"
 
-# 2. Dynamically modify user access profile by nesting identity inside group
 Add-ADGroupMember -Identity "SG-SecurityOperations-Cloud" -Members "erostova"
 
-# 3. Administrative Power-Move: Force immediate delta synchronization replication
 Start-ADSyncSyncCycle -PolicyType Delta
 ```
 
-## Bonus
-### Advanced Lifecycle Testing: Bulk Account Suspension (SecOps Scenario)
-To simulate an immediate incident response or bulk offboarding event, a secondary script was executed to instantly disable all six targeted identities at the directory level.
-
-#### Suspension Script Execution:
-![PowerShell Account Suspension Run](02a_powershell_account_suspension.png)
-
-#### Target Directory Suspended State:
-The downward arrows on the user objects visually confirm that the accounts are explicitly disabled across the domain:
-![Active Directory Disabled State](02b_active_directory_disabled_users.png)
+</details>
 
 ---
 
+## 3. Leaver Scenario: Account Disable and Offboarding
+
+To simulate an offboarding event, I disabled multiple user accounts in Active Directory, moved them to a dedicated inactive OU, and verified synchronization.
+
+### Screenshots
+![Leaver Bulk Disable Sync Run](leaver_bulk_disable_sync_run.png)
+
+![AD Disabled Users OU State](ad_disabled_users_ou_state.png)
+
 ---
 
-## Phase 3: Cloud Access Governance via Identity-as-Code (IdaC)
-**Objective:** Programmatically orchestrate Zero-Trust access controls within the Microsoft Entra ID tenant using HashiCorp Terraform, eliminating manual UI configuration risk and enforcing continuous security posture baselines.
+## What I Learned
+- How identity changes flow from Active Directory to Microsoft Entra ID
+- How synchronization affects user and group updates in hybrid environments
+- How group-based access control supports role changes (Mover scenario)
+- How account disabling and OU structuring supports offboarding (Leaver scenario)
+- How Joiner / Mover / Leaver lifecycle processes are implemented in IAM environments
 
-### 🛠️ Architectural Strategy & Design
-Instead of performing manual click-ops inside the Azure portal, the tenant's security layer was codified using declarative **HashiCorp Configuration Language (HCL)**. 
 
-To achieve production-grade consistency, the pipeline utilizes **Dynamic Data Sources** rather than hardcoding sensitive object GUIDs. Terraform dynamically queries the live directory at runtime to look up the newly synchronized on-premises identities (`alexadmin` and `vsupport`) using their User Principal Names (UPNs) and binds them directly to targeted access perimeters.
 
-### 📝 Codebase Architecture
+# Phase 4: Access Governance with Terraform (Entra ID)
 
-The deployment infrastructure is split cleanly into a dedicated `terraform/` directory:
+## Objective
+Use Terraform to create and manage basic Microsoft Entra ID Conditional Access policies instead of configuring them manually in the Azure portal.
 
-#### 1. Provider Infrastructure Initialization (`provider.tf`)
-Defines the required HashiCorp Microsoft Entra ID (`azuread`) engine hooks and establishes the Azure CLI interactive authentication bridge.
+---
+
+## What I Implemented
+- Used Terraform (AzureAD provider) to manage Entra ID Conditional Access policies
+- Created a policy requiring MFA for an administrative user
+- Created a second policy restricting access for a vendor account
+- Used dynamic user lookup instead of hardcoding object IDs
+- Applied configuration using Terraform CLI commands
+
+---
+
+## Terraform Configuration
+
+### Provider Setup
 ```hcl
 terraform {
   required_providers {
@@ -199,21 +230,17 @@ terraform {
   }
 }
 
-provider "azuread" {
-  # Authenticated securely via active local Azure CLI session tokens
-}
+provider "azuread" {}
 ```
-### 2. Core Zero-Trust Boundary Matrix (main.tf)
-Defines environment variables, resolves dynamic object identities, and declares two distinct conditional access restrictions.
+
+---
+
+### Conditional Access Policies
 ```hcl
-# Global Tenant Context Variables
 variable "tenant_domain" {
-  type        = string
-  default     = "scfun.onmicrosoft.com" # Target directory primary suffix
-  description = "The target primary domain suffix for the Entra ID tenant."
+  default = "scfun.onmicrosoft.com"
 }
 
-# Dynamic Directory Identity Lookups (Data Sources)
 data "azuread_user" "admin_user" {
   user_principal_name = "alexadmin@${var.tenant_domain}"
 }
@@ -222,275 +249,254 @@ data "azuread_user" "vendor_user" {
   user_principal_name = "vsupport@${var.tenant_domain}"
 }
 
-# Zero-Trust Policy 01: Enforce MFA for Administrative Personas
-resource "azuread_conditional_access_policy" "mfa_for_admins" {
-  display_name = "SEC-CAP-01-MFA-For-Administrators"
+resource "azuread_conditional_access_policy" "mfa_admin" {
+  display_name = "MFA-For-Admins"
   state        = "enabled"
 
   conditions {
-    client_app_types = ["all"]
-    
-    applications {
-      included_applications = ["All"]
-    }
-
     users {
       included_users = [data.azuread_user.admin_user.object_id]
     }
-  }
-
-  grant_controls {
-    operator          = "OR"
-    built_in_controls = ["mfa"]
-  }
-}
-
-# Zero-Trust Policy 02: Restrict Third-Party Vendor Access
-resource "azuread_conditional_access_policy" "vendor_security_gate" {
-  display_name = "SEC-CAP-02-Vendor-Security-Gate"
-  state        = "enabled"
-
-  conditions {
-    client_app_types = ["all"]
 
     applications {
       included_applications = ["All"]
     }
+  }
 
+  grant_controls {
+    built_in_controls = ["mfa"]
+  }
+}
+
+resource "azuread_conditional_access_policy" "vendor_restriction" {
+  display_name = "Vendor-Access-Policy"
+  state        = "enabled"
+
+  conditions {
     users {
       included_users = [data.azuread_user.vendor_user.object_id]
+    }
+
+    applications {
+      included_applications = ["All"]
     }
   }
 
   grant_controls {
-    operator          = "OR"
     built_in_controls = ["mfa"]
   }
 }
 ```
 
-Continuous Deployment Pipeline Workflow
-Execution and enforcement were carried out inside a standard Infrastructure-as-Code pipeline via PowerShell:
-
-Initialize the Working Directory:
-
-PowerShell
-terraform init
-Downloads the required HashiCorp Microsoft Graph API integration plugins.
-
-Generate the Execution Strategy (Dry Run):
-
-PowerShell
-terraform plan
-Evaluates configuration state against active cloud tenant schema to preview changes before modification.
-
-Enforce Target Posture:
-
-PowerShell
-terraform apply -auto-approve
-🔍 Real-World Engineering Problem Remediation
-The Obstacle: Initial orchestration deployment phases failed with an API BadRequest response from Microsoft Graph:
-
-"Security Defaults is enabled in the tenant. You must disable Security defaults before enabling a Conditional Access policy."
-
-The Root Cause Analysis: Greenfield Microsoft Entra ID tenants deploy with legacy un-customizable "Security Defaults" turned on natively. The Microsoft Graph API explicitly blocks custom conditional access engine evaluation if these underlying base settings are active.
-
-The Solution: Executed an administrative override within the tenant overview configuration panel to safely disable Security Defaults, explicitly citing the transition to advanced granular Conditional Access policies.
-
-Upon remediation, the pipeline immediately passed validation checks and successfully initialized both active rules.
-
-📊 Verification & Visual Evidence
-1. Command-Line Execution Output
-Successful infrastructure provisioning via the local automation runtime, confirming both active security resources were pushed upstream cleanly:
-
-2. Cloud Directory Status Validation
-The Microsoft Entra ID administration panel confirms that both programmatic security wrappers are fully active, enforcing real-time Zero-Trust policies across the tenant:
 ---
 
-## Phase 4: Securing Emergency Access (Break-Glass Monitoring)
-**Objective:** Architect a continuous cloud monitoring telemetry pipeline to detect and alert on unauthorized utilization of the emergency break-glass account (`breakglass01`).
+## Deployment Steps
 
-### Security Strategy
-Emergency access accounts hold highly privileged global roles but are explicitly bypassed from Conditional Access MFA rules to prevent lockout during a widespread identity provider outage. Due to the high risk of account compromise, a zero-trust real-time monitoring solution was designed using Azure Monitor and Kusto Query Language (KQL).
+- `terraform init` – initialize provider plugins  
+- `terraform plan` – review planned changes  
+- `terraform apply -auto-approve` – apply configuration  
 
-### Detection Engineering (KQL Query)
-The following query is deployed within an Azure Log Analytics Workspace, scheduled to run every 5 minutes with an alert threshold of `> 0` results:
+---
+
+## Issue Encountered & Fix
+
+During deployment, Terraform failed because Microsoft Entra ID had **Security Defaults enabled**, which blocked Conditional Access policy creation.
+
+### Resolution
+- Disabled Security Defaults in the Entra admin portal
+- Re-ran Terraform deployment successfully
+- Policies were applied and became active in the tenant
+
+---
+
+## Verification
+
+- Confirmed Conditional Access policies were created in Entra ID
+- Verified MFA requirement applied to admin user
+- Verified vendor policy was active and enforced
+
+---
+
+## What I Learned
+- How Terraform can be used to manage Entra ID access policies
+- How Conditional Access policies enforce MFA and access restrictions
+- How API-level restrictions (like Security Defaults) affect automation
+- Basic troubleshooting of Microsoft Graph / Entra policy deployment issues
+---
+
+# Phase 5: Break-Glass Account Monitoring (Log Query)
+
+## Objective
+Monitor sign-in activity for a high-privilege break-glass account using Microsoft Entra sign-in logs.
+
+---
+
+## What I Implemented
+- Queried Microsoft Entra ID sign-in logs using Kusto Query Language (KQL)
+- Filtered activity for a break-glass account (`breakglass01`)
+- Reviewed successful sign-in events for audit visibility
+
+---
+
+## KQL Query Used
 
 ```kusto
 SigninLogs
-| where UserPrincipalName =~ "breakglass01@scfun.onmicrosoft.com"
-| where Status.errorCode == 0 
-| project TimeGenerated, UserPrincipalName, IPAddress, Location, ClientAppUsed, ResultDescription
+| where UserPrincipalName == "breakglass01@scfun.onmicrosoft.com"
+| where Status.errorCode == 0
+| project TimeGenerated, UserPrincipalName, IPAddress, Location, ClientAppUsed
 ```
----
 
 ---
 
-## Phase 5: Programmatic Directory Governance & Compliance Auditing
-**Objective:** Engineer an automated compliance auditing utility using the modern Microsoft Graph API ecosystem to programmatically detect directory risk vectors, orphaned privileges, and external identity anomalies.
-
-## 📊 Governance Strategy & Design Choices
-In large-scale enterprise environments (particularly within regulated financial frameworks), manual portal inspections fail to meet continuous audit standards. This phase implements a scalable **Compliance-as-Code** reporting mechanism using a custom PowerShell pipeline designed around the modern **Microsoft Graph API core schema**.
-
-The auditing logic intentionally bypasses legacy modules to target active Graph endpoints directly, evaluating all synchronized directory personas against three core enterprise compliance rules:
-
-1. **Privileged Core Security Mapping (Rule 01):** Inspects high-value infrastructure identities (such as the emergency break-glass account `breakglass01`) to verify that explicit logging and premium structural licensing rules are intact. 
-2. **Third-Party Boundary Control (Rule 02):** Flags synchronized external contractor/vendor identities (`vsupport`) to enforce mandatory quarterly access re-certification cycles.
-3. **Automated Risk Profiling (Rule 03):** Dynamically parses object arrays to output a real-time risk classification matrix (`COMPLIANT`, `NON-COMPLIANT`, `REVIEW REQUIRED`), providing the IAM team with an instant data stream for risk remediation.
+## Purpose
+Break-glass accounts are highly privileged emergency accounts that are excluded from standard MFA policies. Monitoring their usage is important to ensure any access is intentional and reviewed.
 
 ---
 
----
+## What I Learned
+- How to query Entra ID sign-in logs using KQL
+- How break-glass accounts are used in enterprise IAM environments
+- Basic log filtering and audit visibility concepts
 
-## Phase 6: Least-Privilege Enforcement via Privileged Identity Management (PIM)
-**Objective:** Eliminate permanent standing administrative privileges within the cloud tenant by architecting a Just-In-Time (JIT) role elevation matrix to mitigate lateral movement risks and fulfill strict enterprise compliance frameworks (SOX/FINRA).
+# Phase 6: Basic Compliance Reporting with Microsoft Graph
 
-### 🔒 The Problem: Standing Privileges as an Attack Vector
-In a standard legacy environment, administrative accounts often hold permanent global rights. If an administrative identity is compromised via credential harvesting or session hijacking at 3:00 AM, an adversary instantly gains full structural control over the directory before detection teams can respond.
-
-### 🛡️ The Architecture: Zero Standing Access (ZSA)
-To solve this, the synchronized administrative persona (`alexadmin`) was stripped of permanent active directory roles. Instead, the identity was onboarded into **Entra ID Privileged Identity Management (PIM)** and designated as **Eligible** rather than permanently assigned. 
-
-Under normal operating conditions, the account possesses zero active cloud directory permissions.
-
-### ⚙️ Just-In-Time (JIT) Activation Constraints
-When operational requirements necessitate administrative intervention (e.g., identity lifecycle modifications or break-glass tasks), the administrator must explicitly request role activation through the PIM control engine.
-
-The following governance policies were engineered into the activation workflow:
-
-Step-Up Authentication: Forces a mandatory, explicit Multi-Factor Authentication (MFA) challenge at the time of the request, bypassing cached session tokens.
-
-ITSM Ticket Mapping: Requires the engineer to input a valid corporate change management or help desk incident ticket number for auditable tracking.
-
-Time-Bound Ephemeral Access: Access is bound to a strict, hard-coded limit of 2 hours. Once the window closes, the Entra ID core engine automatically drops the active assignment tokens and returns the identity to a zero-privilege resting state.
-
-```text
-[Normal State: Zero Active Roles] ──> [Operational Need] ──> [PIM Request Gate] ──> [MFA + Ticket Justification] ──> [2-Hour Active Window] ──> [Auto-Revocation]
+## Objective
+Use Microsoft Graph API with PowerShell to retrieve and review Microsoft Entra ID user data for basic compliance visibility and reporting.
 
 ---
-### 💻 Compliance Pipeline Source (`05_entra_compliance_audit.ps1`)
 
-The script is decoupled from native graphical front-ends, enabling it to run headless within scheduled enterprise automation tasks:
+## What I Implemented
+- Connected to Microsoft Graph using PowerShell (via `az rest`)
+- Queried Entra ID user objects from the directory
+- Parsed JSON responses into PowerShell objects
+- Reviewed identity attributes for basic compliance-style reporting
+- Built simple logic to flag specific identity types (break-glass and vendor accounts)
+
+---
+
+## Microsoft Graph Query Script
 
 ```powershell
-# ==============================================================================
-# PHASE 5: MICROSOFT GRAPH COMPLIANCE & IDENTITY LIFECYCLE AUDITING
-# ==============================================================================
-Write-Host "Querying Microsoft Graph API directly via Identity Core Core..." -ForegroundColor Cyan
+# Query Microsoft Graph for Entra ID users
+Write-Host "Querying Microsoft Graph for user data..." -ForegroundColor Cyan
 
-# 1. Directly invoke the raw Graph API user metadata endpoints
-$RawResponse = az rest --method get --url "[https://graph.microsoft.com/v1.0/users](https://graph.microsoft.com/v1.0/users)?`$select=displayName,userPrincipalName,id,assignedLicenses"
+$RawResponse = az rest --method get --url "https://graph.microsoft.com/v1.0/users?`$select=displayName,userPrincipalName,id,assignedLicenses"
 
-# 2. Parse the raw incoming JSON payload into structured PowerShell objects
+# Convert JSON response into PowerShell object
 $GraphData = ConvertFrom-Json $RawResponse
 $TenantUsers = $GraphData.value
 
-Write-Host "`n=== LIVE IAM COMPLIANCE AUDIT REPORT ===" -ForegroundColor Yellow
-Write-Host "----------------------------------------------------------------------"
+Write-Host "`n=== BASIC IAM COMPLIANCE REPORT ===" -ForegroundColor Yellow
+Write-Host "-----------------------------------"
 
-# 3. Process identity structures through the compliance verification engine
 foreach ($User in $TenantUsers) {
-    $RiskFlags = @()
+
     $Status = "COMPLIANT"
-    
-    # Audit Rule 01: Verify licensing integrity on administrative break-glass accounts
-    if ($User.userPrincipalName -like "*breakglass*" -and ($User.assignedLicenses.Count -eq 0 -or $User.assignedLicenses -eq $null)) {
-        $RiskFlags += "Privileged Break-Glass Account missing explicit license mapping"
-        $Status = "NON-COMPLIANT"
-    }
-    
-    # Audit Rule 02: Enforce lifecycle boundaries on external vendor personas
-    if ($User.userPrincipalName -like "*vsupport*") {
-        $RiskFlags += "External Vendor Account requires quarterly access recertification"
+    $Notes = ""
+
+    # Basic rule: check break-glass accounts
+    if ($User.userPrincipalName -like "*breakglass*" -and 
+        ($User.assignedLicenses.Count -eq 0 -or $User.assignedLicenses -eq $null)) {
         $Status = "REVIEW REQUIRED"
+        $Notes = "Break-glass account missing expected license assignment"
     }
 
-    # Stream the formatted audit record out to the host console
+    # Basic rule: check vendor accounts
+    elseif ($User.userPrincipalName -like "*vsupport*") {
+        $Status = "REVIEW REQUIRED"
+        $Notes = "Vendor account requires periodic access review"
+    }
+
     [PSCustomObject]@{
-        "Identity Name" = $User.displayName
-        "UPN / Cloud ID" = $User.userPrincipalName
-        "Audit Status"   = $Status
-        "Risk Analysis"  = if ($RiskFlags) { $RiskFlags -join " | " } else { "No current anomalies detected" }
+        Name      = $User.displayName
+        UPN       = $User.userPrincipalName
+        Status    = $Status
+        Notes     = $Notes
     } | Format-List
 }
 ```
- 📈 Target Telemetry Output Sample
-When evaluated against the active hybrid tenant directory, the automated pipeline extracts, structures, and logs the directory health baseline into the following reporting schema for internal security compliance officers:
-=== LIVE IAM COMPLIANCE AUDIT REPORT ===
-----------------------------------------------------------------------
-
-Identity Name : Alex Admin
-UPN / Cloud ID: alexadmin@scfun.onmicrosoft.com
-Audit Status  : COMPLIANT
-Risk Analysis : No current anomalies detected
-
-Identity Name : Emergency BreakGlass
-UPN / Cloud ID: breakglass01@scfun.onmicrosoft.com
-Audit Status  : NON-COMPLIANT
-Risk Analysis : Privileged Break-Glass Account missing explicit license mapping
-
-Identity Name : Vendor Support
-UPN / Cloud ID: vsupport@scfun.onmicrosoft.com
-Audit Status  : REVIEW REQUIRED
-Risk Analysis : External Vendor Account requires quarterly access recertification
 
 ---
 
-## Phase 7: Enterprise RBAC & SaaS Access Federation Loop (SAML 2.0)
-
-### 📋 Objective & Business Case
-In a modern enterprise environment, manual account creation within third-party Software-as-a-Service (SaaS) platforms introduces massive configuration drift, security technical debt, and human error. 
-
-This phase closes the loop on our hybrid identity lifecycle. It demonstrates how an identity minted on-premises in Active Directory automatically inherits secure, policy-enforced Single Sign-On (SSO) access to an external SaaS ecosystem (**GitHub Enterprise**) based purely on their synchronized **Role-Based Access Control (RBAC)** security group memberships.
-
-### 📐 Architectural Overview
-The end-to-end identity lifecycle flows through three distinct platform boundaries without manual administrator intervention at the destination app:
-
-1. **Inbound Identity Layer:** A user account (`erostova`) is provisioned on-premises and placed into the synchronized security group `SG-SecurityOperations-Cloud`.
-2. **Directory Synchronization Layer:** Microsoft Entra Connect replicates both the user object and the group membership boundaries up to the Microsoft Entra ID cloud tenant.
-3. **Outbound Federation Layer:** Microsoft Entra ID acts as the **Identity Provider (IdP)**, evaluates modern security guardrails, and passes a secure SAML 2.0 assertion token to **GitHub Enterprise** (the **Service Provider (SP)**), authorizing the end-user session.
-
-### 🛠️ Configuration Blueprint
-
-#### 1. Outbound SaaS Application Mapping
-* Navigated to **Entra Admin Center** > **Enterprise Applications** > **GitHub Enterprise Cloud**.
-* Configured SAML 2.0 single sign-on parameters, defining the unique Entity ID and Assertion Consumer Service (ACS) URL targeting the dedicated GitHub organization container (`phillipwyckoff-it`).
-* Mapped the cryptographic token attributes, ensuring the user's Principal Name (UPN) scales natively to target the primary user identification field in the SaaS directory.
-
-#### 2. Role-Based Access Assignment
-* Avoided messy, manual user-by-user assignments within the cloud console.
-* Assigned the synchronized on-premises security group **`SG-SecurityOperations-Cloud`** directly to the GitHub Enterprise application workspace.
-* Result: Any user nested within this AD group automatically inherits the right to authenticate to the GitHub platform.
-
-#### 3. Security Boundary Enforcement (MFA)
-* Triggered strict authentication guardrails. When the un-registered hybrid user attempts their first Service Provider-initiated login, Entra ID intercepts the session, forcing registration and validation of **Microsoft Authenticator Multi-Factor Authentication (MFA)**.
+## What This Demonstrates
+- Basic use of Microsoft Graph API for identity data retrieval
+- How IAM teams can programmatically review directory users
+- Early-stage compliance-style logic using PowerShell
+- Understanding of break-glass and vendor identity types
 
 ---
 
-### 🔍 Verification Metrics & Artifacts
-
-The entire authentication pipeline was validated through a live, clean-room session audit. The visual evidence below validates that the cryptographic handshake and access boundaries are perfectly intact:
-
-#### 1. Inbound-to-Outbound Access Assignment
-* **Location:** Entra Admin Center > Enterprise Applications > GitHub > Users and Groups
-* *Description:* Proves that the enterprise-scale access model is bound entirely to the synchronized security group tier rather than loose human accounts.
-* `![Entra Application Assignment]([INSERT_LINK_TO_YOUR_lab1-01-entra-github-app-assignment.png])`
-
-#### 2. Synchronized Policy Enforcement (MFA Challenge)
-* **Location:** Mobile End-User Browser / Microsoft Authenticator App
-* *Description:* Demonstrates modern identity security practices in action. The hybrid user (`erostova`) is successfully intercepted by our conditional access layers and challenged with a secure, 2-digit Microsoft Authenticator number-matching verification code before token issuance.
-* `![Microsoft Authenticator MFA Verification]([INSERT_LINK_TO_YOUR_MFA_SCREENSHOT_HERE])`
-
-#### 3. Successful IdP-to-SP Token Handoff
-* **Location:** GitHub Federated Organization Landing Interface
-* *Description:* Definitive proof that the SAML 2.0 assertion token passed successfully across tenant boundaries, routing Elena Rostova directly to the federated account-linking interface.
-* `![GitHub SAML Landing Success]([INSERT_LINK_TO_YOUR_lab1-03-github-saml-sso-success.png])`
+## Challenges
+- Required working through Microsoft Graph authentication via Azure CLI
+- JSON response structure required parsing before use in PowerShell
+- Limited permissions affected some data visibility during testing
 
 ---
 
-### 📝 Production Engineering Note: Authentication vs. Provisioning
+## What I Learned
+- How Microsoft Graph API exposes Entra ID directory data
+- How PowerShell can be used for identity reporting tasks
+- How IAM teams begin automating compliance checks
+- Importance of API permissions in identity management systems
 
-During the final stage of end-user validation, the SAML 2.0 handshake successfully completed authentication (**AuthN**), but halted at the GitHub destination interface, prompting the user to create or link a standard GitHub account workspace. 
 
-* **Architectural Root Cause:** SAML 2.0 is strictly an *Authentication* protocol—it proves *who* a user is via cryptographic claims, but it lacks the structural mechanics to *provision* a physical directory database workspace inside a destination SaaS application. GitHub operates on a "Linked Identity" architecture, meaning a destination object must exist to bind to the inbound token.
-* **Enterprise Remediation:** In a true enterprise-scale production deployment, this lifecycle limitation is eliminated by deploying a **SCIM (System for Cross-domain Identity Management)** engine alongside the SAML framework. SCIM uses background API hooks to automatically create, update, and completely de-provision the user's workspace inside GitHub in real-time based on their Entra security group compliance status, ensuring zero stale accounts exist during employee offboarding.
+# Phase 7: SSO and Group-Based Access (SAML Federation)
+
+## Objective
+Demonstrate how Active Directory security groups can be used to control access to a SaaS application using Microsoft Entra ID Single Sign-On (SSO) with SAML.
+
+---
+
+## What I Implemented
+- Configured a SAML-based Single Sign-On (SSO) integration with GitHub Enterprise
+- Used Microsoft Entra ID as the Identity Provider (IdP)
+- Assigned access using an Active Directory security group (`SG-SecurityOperations-Cloud`)
+- Verified that group membership controlled application access
+- Tested user authentication through a federated login flow
+
+---
+
+## Access Flow Overview
+
+1. User is created in Active Directory  
+2. User is added to a security group (`SG-SecurityOperations-Cloud`)  
+3. Group is synchronized to Microsoft Entra ID  
+4. Entra ID is configured as the Identity Provider (IdP)  
+5. User authenticates to GitHub using SAML SSO  
+6. Access is granted based on group membership  
+
+---
+
+## Configuration Summary
+
+### Microsoft Entra ID Setup
+- Configured GitHub Enterprise as an Enterprise Application
+- Enabled SAML-based Single Sign-On
+- Mapped user attributes for authentication (UPN-based identity)
+
+### Access Control Model
+- No direct user assignment to the application
+- Access controlled through security group membership
+- Centralized access management through Active Directory
+
+---
+
+## Verification
+
+### Application Assignment via Group
+![GitHub Enterprise Group Assignment](leaver_bulk_disable_sync_run.png)
+
+### SAML Authentication Flow
+![SAML SSO Login Verification](ad_disabled_users_ou_state.png)
+
+### Successful Federated Login
+User successfully authenticated to GitHub using Microsoft Entra ID SSO.
+
+---
+
+## What I Learned
+- How SAML SSO enables authentication between Entra ID and SaaS applications
+- How security groups simplify SaaS access management
+- How identity federation works in a hybrid environment
+- How IAM teams reduce manual account provisioning using centralized access controlengine alongside the SAML framework. SCIM uses background API hooks to automatically create, update, and completely de-provision the user's workspace inside GitHub in real-time based on their Entra security group compliance status, ensuring zero stale accounts exist during employee offboarding.
