@@ -216,7 +216,7 @@ Use Terraform to create and manage basic Microsoft Entra ID Conditional Access p
 - Used dynamic user lookup instead of hardcoding object IDs
 - Applied configuration using Terraform CLI commands
 
-![04_entra_connect_ou_filtering](04_entra_connect_ou_filtering.png)
+![terraform apply success](03a_terraform_apply_success.png)
 ---
 
 ## Terraform Configuration
