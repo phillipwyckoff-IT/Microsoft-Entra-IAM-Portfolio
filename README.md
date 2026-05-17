@@ -488,7 +488,7 @@ Demonstrate how Active Directory security groups can be used to control access t
 ## Verification
 
 ### Application Assignment via Group
-![GitHub Enterprise Group Assignment](leaver_bulk_disable_sync_run.png)
+![GitHub Enterprise Group Assignment](lab1-01-entra-github-app-assignment.png)
 
 ### SAML Authentication Flow
 ![SAML SSO Login Verification](ad_disabled_users_ou_state.png)
