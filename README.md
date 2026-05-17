@@ -122,9 +122,6 @@ In a real environment, limiting synchronization scope helps reduce risk by ensur
 
 ![Password Writeback Configuration](05_entra_connect_password_writeback.png)
 
-![Scoped OU Filtering Verification](04_scoped_ou_filtering.png)
-
-![Optional Features Writeback Verification](05_optional_features_writeback.png)
 
 ## What I Learned
 - How Entra Connect controls identity synchronization between on-prem and cloud
@@ -491,7 +488,7 @@ Demonstrate how Active Directory security groups can be used to control access t
 ![GitHub Enterprise Group Assignment](lab1-01-entra-github-app-assignment.png)
 
 ### SAML Authentication Flow
-![SAML SSO Login Verification](ad_disabled_users_ou_state.png)
+![SAML SSO Login Verification](lab1-03-github-saml-sso-success.png)
 
 ### Successful Federated Login
 User successfully authenticated to GitHub using Microsoft Entra ID SSO.
