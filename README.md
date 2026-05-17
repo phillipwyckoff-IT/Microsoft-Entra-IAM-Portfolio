@@ -120,7 +120,7 @@ In a real environment, limiting synchronization scope helps reduce risk by ensur
 ## Screenshots
 ![Scoped OU Filtering Configuration](04_entra_connect_ou_filtering.png)
 
-![Password Writeback Configuration](05_entra_connect_password_writeback.png)
+![Password Writeback Configuration](05_optional_features_writeback.png)
 
 
 ## What I Learned
