@@ -388,3 +388,64 @@ Identity Name : Vendor Support
 UPN / Cloud ID: vsupport@scfun.onmicrosoft.com
 Audit Status  : REVIEW REQUIRED
 Risk Analysis : External Vendor Account requires quarterly access recertification
+
+---
+
+## Phase 7: Enterprise RBAC & SaaS Access Federation Loop (SAML 2.0)
+
+### 📋 Objective & Business Case
+In a modern enterprise environment, manual account creation within third-party Software-as-a-Service (SaaS) platforms introduces massive configuration drift, security technical debt, and human error. 
+
+This phase closes the loop on our hybrid identity lifecycle. It demonstrates how an identity minted on-premises in Active Directory automatically inherits secure, policy-enforced Single Sign-On (SSO) access to an external SaaS ecosystem (**GitHub Enterprise**) based purely on their synchronized **Role-Based Access Control (RBAC)** security group memberships.
+
+### 📐 Architectural Overview
+The end-to-end identity lifecycle flows through three distinct platform boundaries without manual administrator intervention at the destination app:
+
+1. **Inbound Identity Layer:** A user account (`erostova`) is provisioned on-premises and placed into the synchronized security group `SG-SecurityOperations-Cloud`.
+2. **Directory Synchronization Layer:** Microsoft Entra Connect replicates both the user object and the group membership boundaries up to the Microsoft Entra ID cloud tenant.
+3. **Outbound Federation Layer:** Microsoft Entra ID acts as the **Identity Provider (IdP)**, evaluates modern security guardrails, and passes a secure SAML 2.0 assertion token to **GitHub Enterprise** (the **Service Provider (SP)**), authorizing the end-user session.
+
+### 🛠️ Configuration Blueprint
+
+#### 1. Outbound SaaS Application Mapping
+* Navigated to **Entra Admin Center** > **Enterprise Applications** > **GitHub Enterprise Cloud**.
+* Configured SAML 2.0 single sign-on parameters, defining the unique Entity ID and Assertion Consumer Service (ACS) URL targeting the dedicated GitHub organization container (`phillipwyckoff-it`).
+* Mapped the cryptographic token attributes, ensuring the user's Principal Name (UPN) scales natively to target the primary user identification field in the SaaS directory.
+
+#### 2. Role-Based Access Assignment
+* Avoided messy, manual user-by-user assignments within the cloud console.
+* Assigned the synchronized on-premises security group **`SG-SecurityOperations-Cloud`** directly to the GitHub Enterprise application workspace.
+* Result: Any user nested within this AD group automatically inherits the right to authenticate to the GitHub platform.
+
+#### 3. Security Boundary Enforcement (MFA)
+* Triggered strict authentication guardrails. When the un-registered hybrid user attempts their first Service Provider-initiated login, Entra ID intercepts the session, forcing registration and validation of **Microsoft Authenticator Multi-Factor Authentication (MFA)**.
+
+---
+
+### 🔍 Verification Metrics & Artifacts
+
+The entire authentication pipeline was validated through a live, clean-room session audit. The visual evidence below validates that the cryptographic handshake and access boundaries are perfectly intact:
+
+#### 1. Inbound-to-Outbound Access Assignment
+* **Location:** Entra Admin Center > Enterprise Applications > GitHub > Users and Groups
+* *Description:* Proves that the enterprise-scale access model is bound entirely to the synchronized security group tier rather than loose human accounts.
+* `![Entra Application Assignment]([INSERT_LINK_TO_YOUR_lab1-01-entra-github-app-assignment.png])`
+
+#### 2. Synchronized Policy Enforcement (MFA Challenge)
+* **Location:** Mobile End-User Browser / Microsoft Authenticator App
+* *Description:* Demonstrates modern identity security practices in action. The hybrid user (`erostova`) is successfully intercepted by our conditional access layers and challenged with a secure, 2-digit Microsoft Authenticator number-matching verification code before token issuance.
+* `![Microsoft Authenticator MFA Verification]([INSERT_LINK_TO_YOUR_MFA_SCREENSHOT_HERE])`
+
+#### 3. Successful IdP-to-SP Token Handoff
+* **Location:** GitHub Federated Organization Landing Interface
+* *Description:* Definitive proof that the SAML 2.0 assertion token passed successfully across tenant boundaries, routing Elena Rostova directly to the federated account-linking interface.
+* `![GitHub SAML Landing Success]([INSERT_LINK_TO_YOUR_lab1-03-github-saml-sso-success.png])`
+
+---
+
+### 📝 Production Engineering Note: Authentication vs. Provisioning
+
+During the final stage of end-user validation, the SAML 2.0 handshake successfully completed authentication (**AuthN**), but halted at the GitHub destination interface, prompting the user to create or link a standard GitHub account workspace. 
+
+* **Architectural Root Cause:** SAML 2.0 is strictly an *Authentication* protocol—it proves *who* a user is via cryptographic claims, but it lacks the structural mechanics to *provision* a physical directory database workspace inside a destination SaaS application. GitHub operates on a "Linked Identity" architecture, meaning a destination object must exist to bind to the inbound token.
+* **Enterprise Remediation:** In a true enterprise-scale production deployment, this lifecycle limitation is eliminated by deploying a **SCIM (System for Cross-domain Identity Management)** engine alongside the SAML framework. SCIM uses background API hooks to automatically create, update, and completely de-provision the user's workspace inside GitHub in real-time based on their Entra security group compliance status, ensuring zero stale accounts exist during employee offboarding.
