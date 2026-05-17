@@ -26,6 +26,11 @@ foreach ($Username in $Users) {
         Write-Host "User not found: $Username"
     }
 }
+# Step 3: Force Entra Connect sync (Delta Sync)
+Write-Host "Triggering Azure AD Connect sync..." -ForegroundColor Cyan
+Start-ADSyncSyncCycle -PolicyType Delta
+
+Write-Host "Sync complete."
 ## Project Overview
 This project demonstrates the implementation of a production-grade hybrid identity architecture, bridging an on-premises Active Directory Domain Services (AD DS) infrastructure with a Microsoft 365 / Microsoft Entra ID cloud tenant. 
 
