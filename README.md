@@ -379,7 +379,9 @@ Use Microsoft Graph API with PowerShell to retrieve and review Microsoft Entra I
 ---
 
 ## Microsoft Graph Query Script
-
+<details>
+<summary>View Micrososoft Graph Script</summary>
+  
 ```powershell
 # Query Microsoft Graph for Entra ID users
 Write-Host "Querying Microsoft Graph for user data..." -ForegroundColor Cyan
@@ -419,6 +421,7 @@ foreach ($User in $TenantUsers) {
     } | Format-List
 }
 ```
+</details>
 
 ---
 
