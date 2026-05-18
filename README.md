@@ -1,5 +1,7 @@
 # Hybrid Identity & IAM Home Lab
 
+This lab demonstrates an end-to-end IAM lifecycle from identity creation through authentication, access governance, and monitoring in a hybrid Microsoft environment.
+
 ## Overview
 This project documents a hands-on IAM lab environment I built while transitioning from IT support into Identity and Access Management (IAM).
 
@@ -22,149 +24,266 @@ I used this environment to practice common IAM tasks such as user provisioning, 
 
 ---
 
-# Phase 1: Automated User Provisioning in Active Directory
+# Phase 1: Identity Foundation (Active Directory Provisioning)
 
 ## Objective
-Create and manage test user accounts in Active Directory using PowerShell instead of manual account creation.
+
+This phase establishes the foundational identity structure in Active Directory and implements automated user provisioning using PowerShell.
+
+The goal is to understand how identities are created, structured, and validated in an on-premises environment before being synchronized to Microsoft Entra ID in later phases.
+
+---
 
 ## What I Implemented
-- Created a dedicated `Sync_Users` OU for synchronized identities
-- Built a PowerShell script to automate user creation
-- Configured alternative UPN suffixes for Entra ID synchronization
-- Added basic duplicate-account checking before user creation
-- Created multiple user types including:
-  - standard users
-  - admin account
-  - vendor account
-  - break-glass account
 
-## Screenshots
-![PowerShell Provisioning Outputs](01_powershell_user_provisioning.png)
+### Identity Architecture
+- Created Organizational Unit: `Sync_Users`
+- Defined identity structure for lab users
+- Configured User Principal Name (UPN) suffix for Entra ID compatibility
+- Established consistent naming standards for user accounts
 
-![On-Premises AD Scoped OU Contents](02_active_directory_sync_ou.png)
+### Identity Provisioning
+- Automated Active Directory user creation using PowerShell
+- Generated multiple user personas:
+  - Standard users
+  - Admin account
+  - Vendor account
+  - Break-glass account
+- Implemented duplicate account prevention logic
+- Assigned UPN values aligned with hybrid identity requirements
 
-![AD Domains and Trusts Alternative UPN Configuration](03_alternative_upn_suffix.png)
+### Identity Validation
+- Verified user creation in Active Directory
+- Confirmed correct OU placement
+- Validated UPN formatting for cloud readiness
+- Ensured multiple identity types were successfully created
 
-## What I Learned
-- Basic Active Directory user provisioning with PowerShell
-- How UPN suffixes affect Entra ID synchronization
-- The importance of OU structure in hybrid environments
-- How automation can reduce repetitive administrative tasks
+---
+
+## Why This Matters (IAM Context)
+
+Active Directory is the source of identity in most enterprise IAM environments. Proper design and provisioning at this stage directly impacts all downstream identity, synchronization, and access control processes.
+
+Key IAM principles demonstrated:
+
+- OU structure defines synchronization scope to Microsoft Entra ID
+- UPN format affects cloud identity matching and authentication
+- Automation reduces manual provisioning errors and improves consistency
+- Validation ensures identities are ready for hybrid synchronization
+
+---
+
+## Screenshots (Proof of Work)
+
+![PowerShell Provisioning Output](01_powershell_user_provisioning.png)
+
+![Active Directory Sync OU Structure](02_active_directory_sync_ou.png)
+
+![UPN Suffix Configuration](03_alternative_upn_suffix.png)
+
+---
+
+## Implementation Details
+
 <details>
-<summary>View PowerShell Script</summary>
+<summary>View PowerShell Provisioning Script</summary>
+  
+```
+<Import-Module ActiveDirectory
 
-```powershell
-# 1. Load the Active Directory modules so PowerShell understands AD commands
-Import-Module ActiveDirectory
+$TargetOU   = "OU=Sync_Users,DC=sc300lab,DC=com"
+$UPNSuffix  = "yourtenant.onmicrosoft.com"
+$DefaultPass = "SchwabLab2026!"
 
-# 2. CONFIGURATION VARIABLES
-$TargetOU   = "OU=Sync_Users,DC=sc300lab,DC=com"      # Target OU Distinguished Name
-$UPNSuffix  = "yourtenant.onmicrosoft.com"             # Target M365 Domain (Update this!)
-$DefaultPass = "SchwabLab2026!"                        # Secure temporary bootstrap password
-
-# 3. CORE ENTERPRISE PERSONA MATRIX (Simulating HR Data Ingestion)
 $Roster = @(
-    # Standard Personas
-    @{ FirstName = "Marcus";    LastName = "Vance";      SamName = "mvance";      Title = "IAM Associate" },
-    @{ FirstName = "Elena";     LastName = "Rostova";    SamName = "erostova";    Title = "Security Analyst" },
-    @{ FirstName = "David";     LastName = "Kim";        SamName = "dkim";        Title = "Cloud Engineer" },
-    
-    # Specialized/Privileged Personas
-    @{ FirstName = "Alex";      LastName = "Admin";      SamName = "alexadmin";   Title = "Helpdesk Administrator" },
-    @{ FirstName = "Vendor";    LastName = "Support";    SamName = "vsupport";    Title = "Third-Party Contractor" },
-    @{ FirstName = "Emergency"; LastName = "BreakGlass"; SamName = "breakglass01";Title = "Break-Glass Account Override" }
+    @{ FirstName = "Marcus"; LastName = "Vance"; SamName = "mvance"; Title = "IAM Associate" },
+    @{ FirstName = "Elena"; LastName = "Rostova"; SamName = "erostova"; Title = "Security Analyst" },
+    @{ FirstName = "David"; LastName = "Kim"; SamName = "dkim"; Title = "Cloud Engineer" },
+    @{ FirstName = "Alex"; LastName = "Admin"; SamName = "alexadmin"; Title = "Helpdesk Admin" },
+    @{ FirstName = "Vendor"; LastName = "Support"; SamName = "vsupport"; Title = "Contractor" },
+    @{ FirstName = "Emergency"; LastName = "BreakGlass"; SamName = "breakglass01"; Title = "Break Glass Account" }
 )
 
-# 4. PROVISIONING ENGINE
 foreach ($User in $Roster) {
-    $TargetUPN = "$($User.SamName)@$UPNSuffix"
-    $SecurePassword = ConvertTo-SecureString $DefaultPass -AsPlainText -Force
+    $UPN = "$($User.SamName)@$UPNSuffix"
+    $Password = ConvertTo-SecureString $DefaultPass -AsPlainText -Force
 
-    # Structural Check: Ensure account doesn't already exist before creating
     if (-not (Get-ADUser -Filter "SamAccountName -eq '$($User.SamName)'")) {
-        
-        New-ADUser -Name "$($User.FirstName) $($User.LastName)" `
-                   -GivenName $User.FirstName `
-                   -Surname $User.LastName `
-                   -SamAccountName $User.SamName `
-                   -UserPrincipalName $TargetUPN `
-                   -Path $TargetOU `
-                   -Title $User.Title `
-                   -AccountPassword $SecurePassword `
-                   -Enabled $true `
-                   -ChangePasswordAtLogon $false
-        
-        Write-Host "Successfully provisioned enterprise persona: $($User.SamName) as $TargetUPN" -ForegroundColor Green
-    } else {
-        Write-Host "Account identity $($User.SamName) already exists. Skipping creation." -ForegroundColor Yellow
+
+        New-ADUser `
+            -Name "$($User.FirstName) $($User.LastName)" `
+            -GivenName $User.FirstName `
+            -Surname $User.LastName `
+            -SamAccountName $User.SamName `
+            -UserPrincipalName $UPN `
+            -Path $TargetOU `
+            -Title $User.Title `
+            -AccountPassword $Password `
+            -Enabled $true `
+            -ChangePasswordAtLogon $false
     }
 }
+
 ```
+
 </details>
 
-# Phase 2: Scoped Directory Synchronization (Entra Connect)
+---
+
+## Key Concepts Demonstrated
+
+- Active Directory identity provisioning
+- Identity architecture design (OU structure)
+- User Principal Name (UPN) planning for hybrid identity
+- PowerShell automation for IAM workflows
+- Identity validation and readiness for synchronization
+
+---
+
+## Outcome
+
+This phase establishes the identity foundation required for hybrid identity integration in later phases, ensuring all identities are structured, consistent, and ready for synchronization to Microsoft Entra ID.
+
+# Phase 2: Hybrid Identity Synchronization (Entra Connect)
 
 ## Objective
-Configure Microsoft Entra Connect to sync only selected users from on-premises Active Directory to Microsoft Entra ID.
+
+This phase focuses on implementing hybrid identity synchronization between on-premises Active Directory and Microsoft Entra ID using Microsoft Entra Connect.
+
+The goal is to understand how on-prem identities are synchronized to the cloud and how synchronization scope impacts identity governance in a hybrid environment.
+
+---
 
 ## What I Implemented
-- Installed and configured Microsoft Entra Connect using a custom setup (not express settings)
-- Scoped synchronization to only the `Sync_Users` OU
-- Enabled Password Hash Synchronization (PHS) for cloud authentication
-- Enabled Password Writeback to support self-service password reset (SSPR)
-- Prevented full-domain sync to avoid syncing unnecessary or test objects
 
-## Why This Matters
-In a real environment, limiting synchronization scope helps reduce risk by ensuring only intended user accounts are synced to the cloud.
+- Installed and configured Microsoft Entra Connect
+- Scoped synchronization to the `Sync_Users` Organizational Unit
+- Enabled Password Hash Synchronization (PHS)
+- Enabled Password Writeback for self-service password reset (SSPR)
+- Restricted synchronization scope to prevent full directory sync
+- Verified synchronized users in Microsoft Entra ID
 
-## Screenshots
-![Scoped OU Filtering Configuration](04_entra_connect_ou_filtering.png)
+---
+
+## Why This Matters (IAM Context)
+
+Hybrid identity is a core component of modern IAM architecture. In enterprise environments, Entra ID often relies on on-prem Active Directory as the source of identity.
+
+Key IAM concepts demonstrated:
+
+- Identity flow from on-prem AD → Microsoft Entra ID
+- Synchronization scope controls which identities are exposed to the cloud
+- Password Hash Sync enables cloud authentication using on-prem credentials
+- Password Writeback supports secure self-service password reset workflows
+- Proper configuration reduces identity sprawl and security risk
+
+---
+
+## Screenshots (Proof of Work)
+
+![Entra Connect OU Filtering](04_entra_connect_ou_filtering.png)
 
 ![Password Writeback Configuration](05_optional_features_writeback.png)
 
+---
 
-## What I Learned
-- How Entra Connect controls identity synchronization between on-prem and cloud
-- The difference between Password Hash Sync and Password Writeback
-- Why OU filtering is important in hybrid identity environments
-- How configuration choices directly affect what identities appear in Microsoft Entra ID
-# Phase 3: Identity Lifecycle Testing (Joiner / Mover / Leaver)
+## Implimination details
+
+# Forces a delta synchronization between on-prem AD and Entra ID
+
+Start-ADSyncSyncCycle -PolicyType Delta
+
+---
+
+## Key Concepts Demonstrated
+
+- Hybrid identity architecture (AD DS + Entra ID)
+- Microsoft Entra Connect configuration
+- OU-based synchronization scoping
+- Password Hash Synchronization (PHS)
+- Password Writeback for identity recovery scenarios
+- Identity lifecycle preparation for cloud integration
+
+---
+
+## Outcome
+
+This phase establishes the hybrid identity bridge between on-prem Active Directory and Microsoft Entra ID, enabling centralized identity management and preparing the environment for lifecycle and access control scenarios in later phases.
+
+---
+
+# Phase 3: Identity Lifecycle Management (Joiner / Mover / Leaver)
 
 ## Objective
-Validate how user lifecycle changes in Active Directory (joiner, mover, leaver scenarios) are reflected in Microsoft Entra ID through synchronization.
+
+This phase focuses on identity lifecycle management within a hybrid Active Directory and Microsoft Entra ID environment.
+
+The goal is to simulate real-world Joiner, Mover, and Leaver (JML) processes and observe how identity and access changes propagate through synchronization to Microsoft Entra ID.
 
 ---
-
-## 1. Cloud Sync Verification (Joiner Validation)
-
-## What I Observed
-- Verified that on-premises users synchronized to Microsoft Entra ID
-- Confirmed accounts showed as “On-premises sync enabled”
-- Validated identity visibility in the cloud tenant
-
-![Entra ID User Cloud State](06_entra_cloud_sync_verification.png)
-
----
-
-## 2. Mover Scenario: Group-Based Access Change
-
-To simulate a role change, I updated user access using an Active Directory security group and triggered a manual sync.
 
 ## What I Implemented
-- Created a security group in Active Directory
-- Added a user to the group
-- Triggered a delta sync using Azure AD Connect
-- Verified group membership in Microsoft Entra ID
 
-### Screenshots
-![PowerShell Forced Delta Sync Run](07_powershell_group_creation_delta_sync.png)
+### Joiner Scenario
+- Verified newly created users from Phase 1 successfully synchronized to Microsoft Entra ID
+- Confirmed initial identity state in both on-prem AD and cloud environment
 
-![Hybrid Group Cloud Sync Members Verified](08_hybrid_group_rbac_sync.png)
+---  
+
+### Mover Scenario
+- Created and assigned users to a security group: `SG-SecurityOperations-Cloud`
+- Triggered a directory synchronization to update group membership in Microsoft Entra ID
+- Verified group-based access updates in the cloud environment
+
+---  
+
+### Leaver Scenario
+- Disabled multiple user accounts in Active Directory
+- Moved disabled users into a designated inactive OU
+- Triggered synchronization to reflect account status changes in Microsoft Entra ID
+
+---
+
+## Why This Matters (IAM Context)
+
+Identity lifecycle management is a core responsibility of IAM teams. Every organization must ensure that user access is properly granted, modified, and revoked as roles change.
+
+Key IAM concepts demonstrated:
+
+- Joiner process ensures correct onboarding and initial access
+- Mover process reflects role changes through group-based access control
+- Leaver process ensures access removal and account deprovisioning
+- Synchronization ensures consistent identity state across hybrid environments
+
+---
+
+## Screenshots (Proof of Work)
+
+### Joiner Validation
+![Entra ID User Sync Verification](06_entra_cloud_sync_verification.png)
+
+---
+
+### Mover Scenario (Group-Based Access Update)
+![Group Creation and Sync](07_powershell_group_creation_delta_sync.png)
+
+![Hybrid Group Membership in Entra ID](08_hybrid_group_rbac_sync.png)
+
+---
+
+### Leaver Scenario (Account Disablement)
+![Bulk Disable Sync Run](leaver_bulk_disable_sync_run.png)
+
+![Disabled Users OU State](ad_disabled_users_ou_state.png)
+
+---
+
+## Implementation Details
 
 <details>
-<summary>View Script</summary>
+<summary>View Mover Scenario Script</summary>
 
-```powershell
+```
 New-ADGroup -Name "SG-SecurityOperations-Cloud" `
             -GroupScope Global `
             -GroupCategory Security `
@@ -177,51 +296,87 @@ Start-ADSyncSyncCycle -PolicyType Delta
 
 </details>
 
+<details>
+<summary>View Leaver Scenario Process</summary>
+
+```
+Disable-ADAccount -Identity "mvance"
+
+Move-ADObject -Identity (Get-ADUser mvance).DistinguishedName `
+              -TargetPath "OU=Disabled_Users,DC=sc300lab,DC=com"
+
+Start-ADSyncSyncCycle -PolicyType Delta
+```
+
+</details>
+
 ---
 
-## 3. Leaver Scenario: Account Disable and Offboarding
+## Key Concepts Demonstrated
 
-To simulate an offboarding event, I disabled multiple user accounts in Active Directory, moved them to a dedicated inactive OU, and verified synchronization.
-
-### Screenshots
-![Leaver Bulk Disable Sync Run](leaver_bulk_disable_sync_run.png)
-
-![AD Disabled Users OU State](ad_disabled_users_ou_state.png)
+- Identity lifecycle management (JML model)
+- Active Directory group-based access control
+- Hybrid identity synchronization behavior
+- Account disablement and offboarding processes
+- Role change simulation using security groups
+- Identity state consistency across AD and Entra ID
 
 ---
 
-## What I Learned
-- How identity changes flow from Active Directory to Microsoft Entra ID
-- How synchronization affects user and group updates in hybrid environments
-- How group-based access control supports role changes (Mover scenario)
-- How account disabling and OU structuring supports offboarding (Leaver scenario)
-- How Joiner / Mover / Leaver lifecycle processes are implemented in IAM environments
+## Outcome
 
+This phase demonstrates how identity changes are managed over time in a hybrid IAM environment. It validates that user onboarding, role changes, and offboarding actions are consistently reflected between Active Directory and Microsoft Entra ID.
 
-
-# Phase 4: Access Governance with Terraform (Entra ID)
+---
+# Phase 4: Access Governance (Conditional Access with Terraform)
 
 ## Objective
-Use Terraform to create and manage basic Microsoft Entra ID Conditional Access policies instead of configuring them manually in the Azure portal.
+
+This phase focuses on implementing access governance policies in Microsoft Entra ID using Infrastructure as Code (Terraform).
+
+The goal is to demonstrate how IAM policies such as Multi-Factor Authentication (MFA) enforcement and access restrictions can be defined and deployed programmatically rather than manually configured in the Azure portal.
 
 ---
 
 ## What I Implemented
-- Used Terraform (AzureAD provider) to manage Entra ID Conditional Access policies
-- Created a policy requiring MFA for an administrative user
-- Created a second policy restricting access for a vendor account
-- Used dynamic user lookup instead of hardcoding object IDs
-- Applied configuration using Terraform CLI commands
 
-![terraform apply success](03a_terraform_apply_success.png)
-![entra conditional acces](03b_entra_conditional_access.png)
+- Used Terraform to manage Microsoft Entra ID Conditional Access policies
+- Created a policy enforcing MFA for administrative users
+- Created a second policy applying access restrictions for a vendor account
+- Used dynamic user lookup via Microsoft Graph-based data sources
+- Applied and validated configuration changes using Terraform CLI
+
 ---
 
-## Terraform Configuration
+## Why This Matters (IAM Context)
+
+Access governance is a core responsibility of IAM teams. It ensures that authentication and access policies are consistently enforced across the organization.
+
+Key IAM concepts demonstrated:
+
+- Conditional Access enforces identity-based security policies
+- MFA reduces risk of credential compromise
+- Policy-as-code improves consistency and auditability
+- Terraform enables repeatable IAM configuration management
+- Separation of admin vs vendor access reflects least privilege principles
+
+---
+
+## Screenshots (Proof of Work)
+
+![Terraform Apply Success](03a_terraform_apply_success.png)
+
+![Conditional Access Policy in Entra ID](03b_entra_conditional_access.png)
+
+---
+
+## Implementation Details
+
 <details>
-<summary>Terraform Script</summary>
-### Provider Setup
-```hcl
+<summary>View Terraform Configuration</summary>
+  
+```
+
 terraform {
   required_providers {
     azuread = {
@@ -232,12 +387,7 @@ terraform {
 }
 
 provider "azuread" {}
-```
 
----
-
-### Conditional Access Policies
-```hcl
 variable "tenant_domain" {
   default = "scfun.onmicrosoft.com"
 }
@@ -287,203 +437,132 @@ resource "azuread_conditional_access_policy" "vendor_restriction" {
     built_in_controls = ["mfa"]
   }
 }
-
 ```
+
 </details>
 
 ---
 
-## Deployment Steps
+## Key Concepts Demonstrated
 
-- `terraform init` – initialize provider plugins  
-- `terraform plan` – review planned changes  
-- `terraform apply -auto-approve` – apply configuration  
-
----
-
-## Issue Encountered & Fix
-
-During deployment, Terraform failed because Microsoft Entra ID had **Security Defaults enabled**, which blocked Conditional Access policy creation.
-
-### Resolution
-- Disabled Security Defaults in the Entra admin portal
-- Re-ran Terraform deployment successfully
-- Policies were applied and became active in the tenant
+- Microsoft Entra ID Conditional Access
+- Multi-Factor Authentication enforcement
+- IAM policy-as-code (Terraform)
+- Least privilege access control model
+- Identity-based security enforcement
+- Infrastructure-as-Code for IAM governance
 
 ---
 
-## Verification
+## Outcome
 
-- Confirmed Conditional Access policies were created in Entra ID
-- Verified MFA requirement applied to admin user
-- Verified vendor policy was active and enforced
+This phase demonstrates how IAM governance policies can be automated and consistently deployed using Terraform, improving scalability, repeatability, and security posture across identity systems.
 
 ---
 
-## What I Learned
-- How Terraform can be used to manage Entra ID access policies
-- How Conditional Access policies enforce MFA and access restrictions
-- How API-level restrictions (like Security Defaults) affect automation
-- Basic troubleshooting of Microsoft Graph / Entra policy deployment issues
----
-
-# Phase 5: Break-Glass Account Monitoring (Log Query)
+# Phase 5: Authentication, Federation & Monitoring
 
 ## Objective
-Monitor sign-in activity for a high-privilege break-glass account using Microsoft Entra sign-in logs.
 
----
+This phase focuses on implementing and validating authentication, federation, and identity monitoring across the hybrid IAM environment.
 
-## What I Implemented
-- Queried Microsoft Entra ID sign-in logs using Kusto Query Language (KQL)
-- Filtered activity for a break-glass account (`breakglass01`)
-- Reviewed successful sign-in events for audit visibility
-
----
-
-## KQL Query Used
-
-```kusto
-SigninLogs
-| where UserPrincipalName == "breakglass01@scfun.onmicrosoft.com"
-| where Status.errorCode == 0
-| project TimeGenerated, UserPrincipalName, IPAddress, Location, ClientAppUsed
-```
-
----
-
-## Purpose
-Break-glass accounts are highly privileged emergency accounts that are excluded from standard MFA policies. Monitoring their usage is important to ensure any access is intentional and reviewed.
-
----
-
-## What I Learned
-- How to query Entra ID sign-in logs using KQL
-- How break-glass accounts are used in enterprise IAM environments
-- Basic log filtering and audit visibility concepts
-
-# Phase 6: Microsoft Graph Exploration
-
-## Objective
-Explore how Microsoft Graph API can be used with PowerShell to retrieve Microsoft Entra ID user information.
-
----
-
-## What I Worked On
-- Installed and tested Microsoft Graph PowerShell modules
-- Connected to Microsoft Graph using PowerShell authentication
-- Practiced querying Entra ID user information
-- Explored how IAM teams can use Graph for reporting and automation
-
----
-
-## Areas Explored
-- `Connect-MgGraph`
-- `Get-MgUser`
-- Microsoft Graph permissions and authentication
-- PowerShell-based identity reporting
-
----
-
-## What I Learned
-- Microsoft Graph requires proper authentication scopes and permissions
-- PowerShell can be used to automate identity reporting tasks
-- API authentication troubleshooting is an important part of IAM administration
-
-
-# Phase 7: SSO & Group-Based Access (SAML Federation with Entra ID)
-
-# EntraID-IAM-Portfolio
-
-IAM lab demonstrating Microsoft Entra ID–based SAML federation and security group–driven access control for SaaS applications (GitHub Enterprise Cloud).
-
----
-
-## Overview
-
-This lab demonstrates centralized authentication and access control using Microsoft Entra ID as an Identity Provider (IdP). It implements SAML 2.0 SSO with GitHub Enterprise and enforces access through Active Directory–backed security groups.
-
-The goal is to simulate enterprise IAM patterns used for SaaS governance, authentication centralization, and access standardization.
+It demonstrates how users authenticate through Microsoft Entra ID using SAML-based Single Sign-On (SSO), how authentication events are monitored using sign-in logs, and how identity data can be queried using Microsoft Graph.
 
 ---
 
 ## What I Implemented
 
-- Configured SAML 2.0 SSO between Microsoft Entra ID and GitHub Enterprise Cloud  
-- Set Entra ID as the Identity Provider (IdP)  
-- Assigned application access using security group: `SG-SecurityOperations-Cloud`  
-- Removed direct user assignments in favor of group-based access control  
-- Validated authentication using Entra ID sign-in logs  
+### Authentication & Federation
+- Configured SAML 2.0 Single Sign-On between Microsoft Entra ID and GitHub Enterprise Cloud
+- Assigned application access using security group membership
+- Validated authentication flow using Entra ID sign-in logs
+- Confirmed MFA and Conditional Access enforcement during login
+
+### Monitoring & Logging
+- Reviewed Entra ID sign-in logs for authentication events
+- Traced login sessions from initial request through successful authentication
+- Identified authentication errors and resolved session-related issues during testing
+
+### API-Based Identity Visibility
+- Connected to Microsoft Graph using PowerShell
+- Queried Microsoft Entra ID user data using `Get-MgUser`
+- Explored IAM reporting and automation capabilities using Graph API
 
 ---
 
-## Access Model
+## Why This Matters (IAM Context)
 
-User → AD Group → Entra ID → SAML Authentication → GitHub Enterprise Access
+This phase demonstrates how IAM systems are not only responsible for controlling access, but also for providing visibility and auditability into authentication activity.
 
-- Access controlled via security group membership  
-- Authentication enforced by Entra ID (MFA + Conditional Access)  
-- SAML assertion used for federated authentication  
+Key IAM concepts demonstrated:
+
+- SAML enables centralized authentication via Identity Provider (IdP)
+- SSO reduces password sprawl and improves security consistency
+- Sign-in logs provide audit and compliance visibility
+- Conditional Access and MFA enforce authentication policies at runtime
+- Microsoft Graph enables programmatic identity reporting and automation
 
 ---
 
-## Screenshots / Evidence
+## Screenshots (Proof of Work)
 
-### 1. Entra ID Sign-In Logs (Authentication Validation)
+### SAML Authentication Flow
+![SAML SSO Login Success](lab1-03-github-saml-sso-success.png)
+
+---
+
+### Entra ID Sign-In Logs
 ![Sign-In Logs](Entra-Audit-Log-History.png)
 
+---
+
+### Authentication Event Details
+![Authentication Details](Entra-Sign-In-Success-Details.png)
 
 ---
 
-### 2. Detailed Authentication Event Trace
-![Auth Details](Entra-Sign-In-Success-Details.png)
+## Implementation Details
 
+<details>
+<summary>View Microsoft Graph Commands</summary>
 
----
+```
 
-### 3. Enterprise App Assignment (Group-Based Access)
-![Group Assignment](lab1-02-entra-group-membership-sync.png)
+# Connect to Microsoft Graph
+Connect-MgGraph -Scopes "User.Read.All", "AuditLog.Read.All"
 
----
+# Retrieve users from Entra ID
+Get-MgUser
+```
 
-### 4. Successful SAML SSO Login
-![SAML Login Success](lab1-03-github-saml-sso-success.png)
+</details>
 
----
+<details>
+<summary>View Authentication Validation Notes</summary>
 
-## Validation & Testing
+```
+# Example: retrieve specific user
+Get-MgUser -UserId "alexadmin@yourtenant.onmicrosoft.com"
+```
 
-- Verified successful SAML authentication via Entra ID sign-in logs  
-- Confirmed MFA and Conditional Access enforcement during login  
-- Traced full authentication lifecycle from request to access grant  
-- Validated group-based application assignment behavior  
-
----
-
-## Troubleshooting Highlights
-
-- Resolved SSO loop caused by browser session persistence  
-- Identified incorrect UPN mapping affecting SAML assertions  
-- Used sign-in logs to validate authentication flow and troubleshoot failures  
+</details>
 
 ---
 
-## Key Skills Demonstrated
+## Key Concepts Demonstrated
 
-- Microsoft Entra ID SAML federation  
-- Identity Provider (IdP) configuration  
-- Security group–based access control (IAM/RBAC model)  
-- SaaS application integration (GitHub Enterprise Cloud)  
-- Authentication troubleshooting using sign-in logs  
-- MFA + Conditional Access enforcement  
+- SAML 2.0 federation with Microsoft Entra ID
+- Single Sign-On (SSO) authentication flow
+- Identity Provider (IdP) role in authentication
+- Entra ID sign-in log analysis and troubleshooting
+- MFA and Conditional Access enforcement validation
+- Microsoft Graph API for identity reporting
+- IAM observability and audit logging
 
 ---
 
-## Optional Enhancement (SCIM Concept)
+## Outcome
 
-SCIM can extend this implementation by automating lifecycle management:
+This phase demonstrates how authentication, federation, and monitoring work together in a modern IAM environment.
 
-- User provisioning on group assignment  
-- Attribute updates from directory sync  
-- Automatic deprovisioning on group removal  
-- Eliminates orphaned SaaS accounts during offboarding
+It validates that users can securely access SaaS applications through centralized identity management, while IAM teams maintain visibility into authentication activity and system behavior.
