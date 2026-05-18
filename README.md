@@ -185,9 +185,9 @@ Key IAM concepts demonstrated:
 
 ## Screenshots (Proof of Work)
 
-![Entra Connect OU Filtering](04_entra_connect_ou_filtering.png)
+![Entra Connect OU Filtering](Screenshot/04_entra_connect_ou_filtering.png)
 
-![Password Writeback Configuration](05_optional_features_writeback.png)
+![Password Writeback Configuration](Screenshot/05_optional_features_writeback.png)
 
 ---
 
@@ -258,21 +258,21 @@ Key IAM concepts demonstrated:
 ## Screenshots (Proof of Work)
 
 ### Joiner Validation
-![Entra ID User Sync Verification](06_entra_cloud_sync_verification.png)
+![Entra ID User Sync Verification](Screenshot/06_entra_cloud_sync_verification.png)
 
 ---
 
 ### Mover Scenario (Group-Based Access Update)
-![Group Creation and Sync](07_powershell_group_creation_delta_sync.png)
+![Group Creation and Sync](Screenshot/07_powershell_group_creation_delta_sync.png)
 
-![Hybrid Group Membership in Entra ID](08_hybrid_group_rbac_sync.png)
+![Hybrid Group Membership in Entra ID](Screenshot/08_hybrid_group_rbac_sync.png)
 
 ---
 
 ### Leaver Scenario (Account Disablement)
-![Bulk Disable Sync Run](leaver_bulk_disable_sync_run.png)
+![Bulk Disable Sync Run](Screenshot/leaver_bulk_disable_sync_run.png)
 
-![Disabled Users OU State](ad_disabled_users_ou_state.png)
+![Disabled Users OU State](Screenshot/ad_disabled_users_ou_state.png)
 
 ---
 
@@ -357,9 +357,9 @@ Key IAM concepts demonstrated:
 
 ## Screenshots (Proof of Work)
 
-![Terraform Apply Success](03a_terraform_apply_success.png)
+![Terraform Apply Success](Screenshot/03a_terraform_apply_success.png)
 
-![Conditional Access Policy in Entra ID](03b_entra_conditional_access.png)
+![Conditional Access Policy in Entra ID](Screenshot/03b_entra_conditional_access.png)
 
 ---
 
@@ -495,17 +495,17 @@ Key IAM concepts demonstrated:
 ## Screenshots (Proof of Work)
 
 ### SAML Authentication Flow
-![SAML SSO Login Success](lab1-03-github-saml-sso-success.png)
+![SAML SSO Login Success](Screenshot/lab1-03-github-saml-sso-success.png)
 
 ---
 
 ### Entra ID Sign-In Logs
-![Sign-In Logs](Entra-Audit-Log-History.png)
+![Sign-In Logs](Screenshot/Entra-Audit-Log-History.png)
 
 ---
 
 ### Authentication Event Details
-![Authentication Details](Entra-Sign-In-Success-Details.png)
+![Authentication Details](Screenshot/Entra-Sign-In-Success-Details.png)
 
 ---
 
