@@ -391,62 +391,97 @@ Explore how Microsoft Graph API can be used with PowerShell to retrieve Microsof
 - API authentication troubleshooting is an important part of IAM administration
 
 
-# Phase 7: SSO and Group-Based Access (SAML Federation)
+# Phase 7: SSO & Group-Based Access (SAML Federation with Entra ID)
 
-## Objective
-Demonstrate how Active Directory security groups can be used to control access to a SaaS application using Microsoft Entra ID Single Sign-On (SSO) with SAML.
+# EntraID-IAM-Portfolio
+
+IAM lab demonstrating Microsoft Entra ID–based SAML federation and security group–driven access control for SaaS applications (GitHub Enterprise Cloud).
+
+---
+
+## Overview
+
+This lab demonstrates centralized authentication and access control using Microsoft Entra ID as an Identity Provider (IdP). It implements SAML 2.0 SSO with GitHub Enterprise and enforces access through Active Directory–backed security groups.
+
+The goal is to simulate enterprise IAM patterns used for SaaS governance, authentication centralization, and access standardization.
 
 ---
 
 ## What I Implemented
-- Configured a SAML-based Single Sign-On (SSO) integration with GitHub Enterprise
-- Used Microsoft Entra ID as the Identity Provider (IdP)
-- Assigned access using an Active Directory security group (`SG-SecurityOperations-Cloud`)
-- Verified that group membership controlled application access
-- Tested user authentication through a federated login flow
+
+- Configured SAML 2.0 SSO between Microsoft Entra ID and GitHub Enterprise Cloud  
+- Set Entra ID as the Identity Provider (IdP)  
+- Assigned application access using security group: `SG-SecurityOperations-Cloud`  
+- Removed direct user assignments in favor of group-based access control  
+- Validated authentication using Entra ID sign-in logs  
 
 ---
 
-## Access Flow Overview
+## Access Model
 
-1. User is created in Active Directory  
-2. User is added to a security group (`SG-SecurityOperations-Cloud`)  
-3. Group is synchronized to Microsoft Entra ID  
-4. Entra ID is configured as the Identity Provider (IdP)  
-5. User authenticates to GitHub using SAML SSO  
-6. Access is granted based on group membership  
+User → AD Group → Entra ID → SAML Authentication → GitHub Enterprise Access
 
----
-
-## Configuration Summary
-
-### Microsoft Entra ID Setup
-- Configured GitHub Enterprise as an Enterprise Application
-- Enabled SAML-based Single Sign-On
-- Mapped user attributes for authentication (UPN-based identity)
-
-### Access Control Model
-- No direct user assignment to the application
-- Access controlled through security group membership
-- Centralized access management through Active Directory
+- Access controlled via security group membership  
+- Authentication enforced by Entra ID (MFA + Conditional Access)  
+- SAML assertion used for federated authentication  
 
 ---
 
-## Verification
+## Screenshots / Evidence
 
-### Application Assignment via Group
-![GitHub Enterprise Group Assignment](lab1-01-entra-github-app-assignment.png)
-
-### SAML Authentication Flow
-![SAML SSO Login Verification](lab1-03-github-saml-sso-success.png)
-
-### Successful Federated Login
-User successfully authenticated to GitHub using Microsoft Entra ID SSO.
+### 1. Enterprise App Assignment (Group-Based Access)
+![Group Assignment](./screenshots/phase7/entra-github-group-assignment.png)
 
 ---
 
-## What I Learned
-- How SAML SSO enables authentication between Entra ID and SaaS applications
-- How security groups simplify SaaS access management
-- How identity federation works in a hybrid environment
-- How IAM teams reduce manual account provisioning using centralized access controlengine alongside the SAML framework. SCIM uses background API hooks to automatically create, update, and completely de-provision the user's workspace inside GitHub in real-time based on their Entra security group compliance status, ensuring zero stale accounts exist during employee offboarding.
+### 2. Successful SAML SSO Login
+![SAML Login Success](./screenshots/phase7/github-saml-login-success.png)
+
+---
+
+### 3. Entra ID Sign-In Logs (Authentication Validation)
+![Sign-In Logs](./screenshots/phase7/entra-signin-logs-success.png)
+
+---
+
+### 4. Detailed Authentication Event Trace
+![Auth Details](./screenshots/phase7/entra-authentication-details.png)
+
+---
+
+## Validation & Testing
+
+- Verified successful SAML authentication via Entra ID sign-in logs  
+- Confirmed MFA and Conditional Access enforcement during login  
+- Traced full authentication lifecycle from request to access grant  
+- Validated group-based application assignment behavior  
+
+---
+
+## Troubleshooting Highlights
+
+- Resolved SSO loop caused by browser session persistence  
+- Identified incorrect UPN mapping affecting SAML assertions  
+- Used sign-in logs to validate authentication flow and troubleshoot failures  
+
+---
+
+## Key Skills Demonstrated
+
+- Microsoft Entra ID SAML federation  
+- Identity Provider (IdP) configuration  
+- Security group–based access control (IAM/RBAC model)  
+- SaaS application integration (GitHub Enterprise Cloud)  
+- Authentication troubleshooting using sign-in logs  
+- MFA + Conditional Access enforcement  
+
+---
+
+## Optional Enhancement (SCIM Concept)
+
+SCIM can extend this implementation by automating lifecycle management:
+
+- User provisioning on group assignment  
+- Attribute updates from directory sync  
+- Automatic deprovisioning on group removal  
+- Eliminates orphaned SaaS accounts during offboarding
