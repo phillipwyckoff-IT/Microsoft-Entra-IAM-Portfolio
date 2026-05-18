@@ -287,18 +287,18 @@ resource "azuread_conditional_access_policy" "vendor_restriction" {
     built_in_controls = ["mfa"]
   }
 }
-</details>
+
 ```
+</details>
 
 ---
 
 ## Deployment Steps
-<details>
-<summary>Terraform Script</summary>
+
 - `terraform init` – initialize provider plugins  
 - `terraform plan` – review planned changes  
 - `terraform apply -auto-approve` – apply configuration  
-</details>details>
+
 ---
 
 ## Issue Encountered & Fix
