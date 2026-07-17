@@ -101,7 +101,7 @@ Key IAM principles demonstrated:
 
 $TargetOU   = "OU=Sync_Users,DC=sc300lab,DC=com"
 $UPNSuffix  = "yourtenant.onmicrosoft.com"
-$DefaultPass = "SchwabLab2026!"
+$DefaultPass = "enterpassword"
 
 $Roster = @(
     @{ FirstName = "Marcus"; LastName = "Vance"; SamName = "mvance"; Title = "IAM Associate" },
@@ -382,7 +382,7 @@ terraform {
 provider "azuread" {}
 
 variable "tenant_domain" {
-  default = "scfun.onmicrosoft.com"
+  default = "enter domain"
 }
 
 data "azuread_user" "admin_user" {
